@@ -1,0 +1,17 @@
+[project]
+name = "reicalc-mcp"
+version = "0.1.0"
+description = "MCP server for real estate investment calculators"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "mcp",
+]
+
+[project.scripts]
+reicalc-mcp = "src.reicalc_mcp.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
