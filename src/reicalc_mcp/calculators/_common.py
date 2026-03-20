@@ -92,3 +92,36 @@ def safe_irr_pct(cash_flows: list[float], guess: float = 0.1) -> tuple[float, bo
 def round2(value: float) -> float:
     """Round to 2 decimal places."""
     return round(value, 2)
+
+
+# ---------------------------------------------------------------------------
+# FHA helpers
+# ---------------------------------------------------------------------------
+
+FHA_UFMIP_RATE = 0.0175  # 1.75%
+
+
+def calculate_fha_ufmip(base_loan: float) -> float:
+    """Calculate FHA Upfront Mortgage Insurance Premium."""
+    return round2(base_loan * FHA_UFMIP_RATE)
+
+
+def calculate_fha_loan_amount(home_price: float, down_payment: float, roll_in_ufmip: bool = True) -> float:
+    """Calculate FHA total loan amount, optionally rolling in UFMIP."""
+    base_loan = home_price - down_payment
+    if roll_in_ufmip:
+        return round2(base_loan + calculate_fha_ufmip(base_loan))
+    return round2(base_loan)
+
+
+def fha_annual_mip_rate(ltv: float, loan_term_years: int = 30) -> float:
+    """Return annual MIP rate (%) for FHA loans based on LTV and term.
+
+    Rates for base loan amounts ≤ $726,200 (standard conforming limit):
+      >15yr: LTV ≤ 95% → 0.50%, LTV > 95% → 0.55%
+      ≤15yr: LTV ≤ 90% → 0.15%, LTV > 90% → 0.40%
+    """
+    if loan_term_years > 15:
+        return 0.50 if ltv <= 95 else 0.55
+    else:
+        return 0.15 if ltv <= 90 else 0.40

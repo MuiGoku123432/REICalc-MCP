@@ -2,7 +2,12 @@
 
 import math
 
-from ._common import calculate_mortgage_payment, round2
+from ._common import (
+    calculate_mortgage_payment,
+    round2,
+    calculate_fha_loan_amount,
+    fha_annual_mip_rate,
+)
 from ._validation import validate_positive, validate_non_negative, validate_percent, validate_range
 
 
@@ -16,6 +21,7 @@ def calculate_affordability(
     hoa_monthly: float = 0,
     loan_term_years: int = 30,
     pmi_rate: float = 0.5,
+    loan_type: str = "conventional",
 ) -> dict:
     """Calculate how much house you can afford based on income, debts, and down payment."""
     validate_positive(annual_income, "annual_income")
@@ -57,8 +63,15 @@ def calculate_affordability(
     max_home_price = max_loan_amount + down_payment
     down_payment_percent = (down_payment / max_home_price) * 100 if max_home_price > 0 else 0
 
+    # For FHA, override PMI rate with correct MIP rate
+    if loan_type == "fha":
+        effective_ltv = 100 - down_payment_percent
+        effective_pmi_rate = fha_annual_mip_rate(effective_ltv, loan_term_years)
+    else:
+        effective_pmi_rate = pmi_rate
+
     pmi_required = down_payment_percent < 20
-    pmi_monthly = max_loan_amount * (pmi_rate / 100) / 12 if pmi_required else 0
+    pmi_monthly = max_loan_amount * (effective_pmi_rate / 100) / 12 if pmi_required else 0
 
     if pmi_required:
         available_after_pmi = max_monthly_payment - pmi_monthly
@@ -68,7 +81,12 @@ def calculate_affordability(
         max_home_price = max_loan_amount + down_payment
         down_payment_percent = (down_payment / max_home_price) * 100 if max_home_price > 0 else 0
 
+    # For FHA, inflate loan amount with UFMIP
+    if loan_type == "fha":
+        max_loan_amount = calculate_fha_loan_amount(max_home_price, down_payment)
+
     principal_interest = calculate_mortgage_payment(max_loan_amount, monthly_rate, num_payments)
+    pmi_monthly = max_loan_amount * (effective_pmi_rate / 100) / 12 if pmi_required else 0
     property_tax = max_home_price * property_tax_monthly
     insurance = max_home_price * insurance_monthly
     total_monthly = principal_interest + property_tax + insurance + pmi_monthly + hoa_monthly
@@ -241,6 +259,7 @@ def evaluate_house_hack(
     hoa_monthly: float = 0,
     pmi_rate: float = 0.5,
     additional_expenses: float = 0,
+    loan_type: str = "conventional",
 ) -> dict:
     """Calculate returns from house hacking.
 
@@ -251,7 +270,17 @@ def evaluate_house_hack(
     validate_non_negative(down_payment, "down_payment")
     validate_non_negative(monthly_rent_unit2, "monthly_rent_unit2")
     validate_range(interest_rate, "interest_rate", 0, 100)
-    loan_amount = purchase_price - down_payment
+
+    if loan_type == "fha":
+        loan_amount = calculate_fha_loan_amount(purchase_price, down_payment)
+        down_payment_pct = (down_payment / purchase_price * 100) if purchase_price > 0 else 0
+        effective_ltv = 100 - down_payment_pct
+        effective_pmi_rate = fha_annual_mip_rate(effective_ltv, loan_term_years)
+    else:
+        loan_amount = purchase_price - down_payment
+        down_payment_pct = (down_payment / purchase_price * 100) if purchase_price > 0 else 0
+        effective_pmi_rate = pmi_rate
+
     monthly_rate = interest_rate / 100 / 12
     num_payments = loan_term_years * 12
 
@@ -259,8 +288,7 @@ def evaluate_house_hack(
     property_tax_monthly = purchase_price * (property_tax_rate / 100) / 12
     insurance_monthly = purchase_price * (insurance_rate / 100) / 12
 
-    down_payment_pct = (down_payment / purchase_price * 100) if purchase_price > 0 else 0
-    pmi_monthly = (loan_amount * (pmi_rate / 100) / 12) if down_payment_pct < 20 else 0
+    pmi_monthly = (loan_amount * (effective_pmi_rate / 100) / 12) if down_payment_pct < 20 else 0
 
     mortgage_piti = principal_interest + property_tax_monthly + insurance_monthly + pmi_monthly + hoa_monthly
     total_housing_cost = mortgage_piti + additional_expenses

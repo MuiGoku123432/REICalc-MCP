@@ -2,7 +2,13 @@
 
 from typing import Any
 
-from ._common import calculate_mortgage_payment, round2
+from ._common import (
+    calculate_mortgage_payment,
+    round2,
+    calculate_fha_loan_amount,
+    calculate_fha_ufmip,
+    fha_annual_mip_rate,
+)
 from ._validation import validate_positive, validate_non_negative, validate_range, validate_percent
 
 
@@ -344,14 +350,21 @@ def analyze_debt_to_income(
 
     # Compute housing payment from loan details if provided
     if purchase_price is not None and down_payment is not None and interest_rate is not None:
-        loan_amount = purchase_price - down_payment
+        base_loan = purchase_price - down_payment
+        if loan_type == "fha":
+            loan_amount = calculate_fha_loan_amount(purchase_price, down_payment)
+            ltv = (base_loan / purchase_price * 100) if purchase_price > 0 else 0
+            effective_pmi_rate = fha_annual_mip_rate(ltv, loan_term_years)
+        else:
+            loan_amount = base_loan
+            effective_pmi_rate = pmi_rate
         monthly_rate = interest_rate / 100 / 12
         num_payments = loan_term_years * 12
         pi = calculate_mortgage_payment(loan_amount, monthly_rate, num_payments)
         prop_tax = purchase_price * (property_tax_rate / 100) / 12
         insurance = purchase_price * (insurance_rate / 100) / 12
         dp_pct = (down_payment / purchase_price * 100) if purchase_price > 0 else 0
-        pmi = (loan_amount * (pmi_rate / 100) / 12) if dp_pct < 20 else 0
+        pmi = (loan_amount * (effective_pmi_rate / 100) / 12) if dp_pct < 20 else 0
         proposed_housing_payment = pi + prop_tax + insurance + pmi + hoa_monthly
 
     validate_positive(monthly_income, "monthly_income")
@@ -616,10 +629,103 @@ def compare_loans(
     }
 
 
+# ---------------------------------------------------------------------------
+# 4. PITI Calculator
+# ---------------------------------------------------------------------------
+
+def calculate_piti(
+    home_price: float,
+    down_payment_percent: float = 20.0,
+    interest_rate: float = 7.0,
+    loan_term_years: int = 30,
+    property_tax_rate: float = 1.2,
+    insurance_rate: float = 0.5,
+    hoa_monthly: float = 0,
+    loan_type: str = "conventional",
+    pmi_rate: float | None = None,
+) -> dict:
+    """Calculate PITI (Principal, Interest, Tax, Insurance) monthly payment.
+
+    Automatically handles FHA UFMIP and correct MIP rates when loan_type="fha".
+    If pmi_rate is provided, it overrides the default for the loan type.
+    """
+    validate_positive(home_price, "home_price")
+    validate_range(down_payment_percent, "down_payment_percent", 0, 100)
+    validate_range(interest_rate, "interest_rate", 0, 100)
+
+    down_payment = home_price * down_payment_percent / 100
+    base_loan = home_price - down_payment
+
+    # Loan amount and PMI/MIP rate
+    ufmip = 0.0
+    if loan_type == "fha":
+        loan_amount = calculate_fha_loan_amount(home_price, down_payment)
+        ufmip = calculate_fha_ufmip(base_loan)
+        ltv = 100 - down_payment_percent
+        effective_pmi_rate = pmi_rate if pmi_rate is not None else fha_annual_mip_rate(ltv, loan_term_years)
+    else:
+        loan_amount = base_loan
+        if pmi_rate is not None:
+            effective_pmi_rate = pmi_rate
+        elif down_payment_percent >= 20:
+            effective_pmi_rate = 0.0
+        else:
+            effective_pmi_rate = _default_pmi_rate(down_payment_percent, loan_type)
+
+    monthly_rate = interest_rate / 100 / 12
+    num_payments = loan_term_years * 12
+
+    pi = calculate_mortgage_payment(loan_amount, monthly_rate, num_payments)
+    tax_monthly = home_price * (property_tax_rate / 100) / 12
+    insurance_monthly = home_price * (insurance_rate / 100) / 12
+    pmi_monthly = (loan_amount * (effective_pmi_rate / 100) / 12) if down_payment_percent < 20 else 0
+
+    total_piti = pi + tax_monthly + insurance_monthly + pmi_monthly
+    total_with_hoa = total_piti + hoa_monthly
+
+    result: dict = {
+        "monthly_payment": {
+            "principal_and_interest": round2(pi),
+            "property_tax": round2(tax_monthly),
+            "insurance": round2(insurance_monthly),
+            "pmi_mip": round2(pmi_monthly),
+            "hoa": round2(hoa_monthly),
+            "total_piti": round2(total_piti),
+            "total_with_hoa": round2(total_with_hoa),
+        },
+        "loan_details": {
+            "home_price": round2(home_price),
+            "down_payment": round2(down_payment),
+            "down_payment_percent": round2(down_payment_percent),
+            "base_loan": round2(base_loan),
+            "loan_amount": round2(loan_amount),
+            "interest_rate": interest_rate,
+            "loan_term_years": loan_term_years,
+            "loan_type": loan_type,
+        },
+        "pmi_details": {
+            "pmi_required": pmi_monthly > 0,
+            "pmi_rate": round2(effective_pmi_rate),
+            "pmi_monthly": round2(pmi_monthly),
+        },
+    }
+
+    if loan_type == "fha":
+        result["fha_details"] = {
+            "ufmip": round2(ufmip),
+            "ufmip_rate": 1.75,
+            "annual_mip_rate": round2(effective_pmi_rate),
+            "loan_amount_with_ufmip": round2(loan_amount),
+        }
+
+    return result
+
+
 def _default_pmi_rate(down_payment_pct: float, loan_type: str) -> float:
     """Return default annual PMI rate based on LTV and loan type."""
     if loan_type == "fha":
-        return 0.85
+        ltv = 100 - down_payment_pct
+        return fha_annual_mip_rate(ltv)
     if down_payment_pct >= 20:
         return 0.0
     if down_payment_pct >= 15:
@@ -663,7 +769,13 @@ def _analyze_single_loan(
     arm_details = loan_input.get("arm_details")
 
     down_payment = home_price * dp_pct / 100
-    loan_amount = home_price - down_payment
+    base_loan = home_price - down_payment
+    if loan_type == "fha":
+        loan_amount = calculate_fha_loan_amount(home_price, down_payment)
+        ufmip = calculate_fha_ufmip(base_loan)
+    else:
+        loan_amount = base_loan
+        ufmip = 0.0
     monthly_rate = rate / 100 / 12
     num_payments = term_years * 12
 
@@ -693,6 +805,7 @@ def _analyze_single_loan(
     total_principal_paid = 0.0
     total_pmi_paid = 0.0
     pmi_drop_month: int | None = None
+    origination_ltv = (base_loan / home_price * 100) if home_price > 0 else 0
 
     for month in range(1, comparison_months + 1):
         interest_portion = balance * monthly_rate
@@ -701,13 +814,24 @@ def _analyze_single_loan(
         total_principal_paid += principal_portion
         balance -= principal_portion
 
-        # PMI drops when LTV reaches 78%
-        current_ltv = (balance / home_price * 100) if home_price > 0 else 0
-        if pmi_monthly > 0 and current_ltv <= 78:
-            if pmi_drop_month is None:
-                pmi_drop_month = month
-            total_pmi_paid += 0  # no more PMI
-        else:
+        if pmi_monthly > 0 and pmi_drop_month is None:
+            if loan_type == "fha":
+                # FHA MIP: >90% origination LTV = life of loan
+                # ≤90% origination LTV = drops after 11 years (132 months)
+                if origination_ltv > 90:
+                    total_pmi_paid += pmi_monthly  # life of loan, never drops
+                elif month <= 132:
+                    total_pmi_paid += pmi_monthly
+                else:
+                    pmi_drop_month = month
+            else:
+                # Conventional: drops when current LTV reaches 78%
+                current_ltv = (balance / home_price * 100) if home_price > 0 else 0
+                if current_ltv <= 78:
+                    pmi_drop_month = month
+                else:
+                    total_pmi_paid += pmi_monthly
+        elif pmi_drop_month is None:
             total_pmi_paid += pmi_monthly
 
     total_cost_over_period = (
@@ -751,6 +875,7 @@ def _analyze_single_loan(
             "down_payment": round2(down_payment),
             "points_cost": round2(points_cost),
             "estimated_closing_costs": round2(estimated_closing),
+            "ufmip": round2(ufmip),
             "total_upfront": round2(total_upfront),
         },
         "comparison_period": {

@@ -314,6 +314,43 @@ def test_portfolio_growth_leverage_multiplier():
 # Bug C: portfolio growth wrapper should expose all params
 # ---------------------------------------------------------------------------
 
+def test_house_hack_fha_35pct_down():
+    """FHA house hack with 3.5% down should use UFMIP and 0.55% MIP."""
+    result = evaluate_house_hack(
+        purchase_price=363_000,
+        down_payment=12_705,
+        monthly_rent_unit2=1_800,
+        interest_rate=7.0,
+        property_tax_rate=2.2,
+        insurance_rate=0.5,
+        loan_type="fha",
+    )
+    # UFMIP inflates the loan, so P&I should be higher than conventional
+    # Base loan: $350,295, with UFMIP: ~$356,425
+    # P&I on $356,425 at 7% ≈ $2,371
+    pi = result["mortgage_breakdown"]["principal_interest"]
+    assert pi > 2_300, f"P&I too low for FHA with UFMIP: {pi}"
+    # PMI should be 0.55% of ~$356,425 / 12 ≈ $163
+    pmi = result["mortgage_breakdown"]["pmi"]
+    assert 140 < pmi < 200, f"MIP should be ~$163 at 0.55%, got {pmi}"
+    # Total PITI should be ~$3,200+
+    assert result["mortgage_piti"] > 3_100
+
+
+def test_house_hack_conventional_vs_fha():
+    """FHA house hack should have higher P&I than conventional (due to UFMIP)."""
+    conv = evaluate_house_hack(
+        purchase_price=300_000, down_payment=10_500,
+        monthly_rent_unit2=1_200, interest_rate=7.0,
+    )
+    fha = evaluate_house_hack(
+        purchase_price=300_000, down_payment=10_500,
+        monthly_rent_unit2=1_200, interest_rate=7.0,
+        loan_type="fha",
+    )
+    assert fha["mortgage_breakdown"]["principal_interest"] > conv["mortgage_breakdown"]["principal_interest"]
+
+
 def test_portfolio_growth_custom_avg_property_cost():
     """Custom avg_property_cost should change estimated property count."""
     result = project_portfolio_growth(

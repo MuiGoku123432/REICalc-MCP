@@ -7,6 +7,10 @@ from src.reicalc_mcp.calculators._common import (
     calculate_irr,
     calculate_npv,
     safe_irr_pct,
+    FHA_UFMIP_RATE,
+    calculate_fha_ufmip,
+    calculate_fha_loan_amount,
+    fha_annual_mip_rate,
 )
 
 
@@ -137,3 +141,52 @@ def test_npv_at_irr_is_zero():
     assert irr is not None
     npv_at_irr = calculate_npv(flows, irr)
     assert abs(npv_at_irr) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# FHA helpers
+# ---------------------------------------------------------------------------
+
+def test_fha_ufmip_rate_constant():
+    assert FHA_UFMIP_RATE == 0.0175
+
+
+def test_fha_ufmip_calculation():
+    """UFMIP on $350,295 base loan should be $6,130.16."""
+    ufmip = calculate_fha_ufmip(350_295)
+    assert abs(ufmip - 6130.16) < 0.01
+
+
+def test_fha_loan_amount_with_ufmip():
+    """$363K home, 3.5% down: base $350,295 + UFMIP $6,130.16 = $356,425.16."""
+    home_price = 363_000
+    down = home_price * 0.035  # $12,705
+    loan = calculate_fha_loan_amount(home_price, down, roll_in_ufmip=True)
+    base = home_price - down
+    expected = base + base * FHA_UFMIP_RATE
+    assert abs(loan - round(expected, 2)) < 0.01
+
+
+def test_fha_loan_amount_without_ufmip():
+    loan = calculate_fha_loan_amount(300_000, 10_500, roll_in_ufmip=False)
+    assert loan == 289_500.0
+
+
+def test_fha_mip_rate_30yr_high_ltv():
+    """3.5% down → 96.5% LTV → 0.55% MIP for >15yr term."""
+    assert fha_annual_mip_rate(96.5, 30) == 0.55
+
+
+def test_fha_mip_rate_30yr_low_ltv():
+    """10% down → 90% LTV → 0.50% MIP for >15yr term."""
+    assert fha_annual_mip_rate(90.0, 30) == 0.50
+
+
+def test_fha_mip_rate_15yr_low_ltv():
+    """15yr, LTV ≤ 90% → 0.15%."""
+    assert fha_annual_mip_rate(90.0, 15) == 0.15
+
+
+def test_fha_mip_rate_15yr_high_ltv():
+    """15yr, LTV > 90% → 0.40%."""
+    assert fha_annual_mip_rate(95.0, 15) == 0.40

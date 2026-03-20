@@ -13,6 +13,7 @@ from .calculators.lending import (
     calculate_mortgage_affordability,
     analyze_debt_to_income,
     compare_loans,
+    calculate_piti,
 )
 from .calculators.metrics import (
     calculate_irr_tool,
@@ -71,14 +72,15 @@ def calculate_affordability_tool(
     hoa_monthly: float = 0,
     loan_term_years: int = 30,
     pmi_rate: float = 0.5,
+    loan_type: str = "conventional",
 ) -> dict:
-    """Calculate how much house you can afford based on income, debts, and down payment."""
+    """Calculate how much house you can afford based on income, debts, and down payment. Supports FHA with automatic UFMIP and MIP rates."""
     return calculate_affordability(
         annual_income=annual_income, monthly_debts=monthly_debts,
         down_payment=down_payment, interest_rate=interest_rate,
         property_tax_rate=property_tax_rate, insurance_rate=insurance_rate,
         hoa_monthly=hoa_monthly, loan_term_years=loan_term_years,
-        pmi_rate=pmi_rate,
+        pmi_rate=pmi_rate, loan_type=loan_type,
     )
 
 
@@ -129,14 +131,16 @@ def evaluate_house_hack_tool(
     hoa_monthly: float = 0,
     pmi_rate: float = 0.5,
     additional_expenses: float = 0,
+    loan_type: str = "conventional",
 ) -> dict:
-    """Calculate returns from house hacking (living in one unit and renting others). Computes PITI internally."""
+    """Calculate returns from house hacking (living in one unit and renting others). Computes PITI internally. Supports FHA with automatic UFMIP and MIP rates."""
     return evaluate_house_hack(
         purchase_price=purchase_price, down_payment=down_payment,
         monthly_rent_unit2=monthly_rent_unit2, interest_rate=interest_rate,
         loan_term_years=loan_term_years, property_tax_rate=property_tax_rate,
         insurance_rate=insurance_rate, hoa_monthly=hoa_monthly,
         pmi_rate=pmi_rate, additional_expenses=additional_expenses,
+        loan_type=loan_type,
     )
 
 
@@ -238,6 +242,28 @@ def analyze_debt_to_income_tool(
         interest_rate=interest_rate, loan_term_years=loan_term_years,
         property_tax_rate=property_tax_rate,
         insurance_rate=insurance_rate, hoa_monthly=hoa_monthly,
+        pmi_rate=pmi_rate,
+    )
+
+
+@mcp.tool()
+def calculate_piti_tool(
+    home_price: float,
+    down_payment_percent: float = 20.0,
+    interest_rate: float = 7.0,
+    loan_term_years: int = 30,
+    property_tax_rate: float = 1.2,
+    insurance_rate: float = 0.5,
+    hoa_monthly: float = 0,
+    loan_type: str = "conventional",
+    pmi_rate: float | None = None,
+) -> dict:
+    """Calculate PITI (Principal, Interest, Tax, Insurance) monthly payment. Quick way to get accurate housing costs. Supports FHA with automatic UFMIP and MIP rates."""
+    return calculate_piti(
+        home_price=home_price, down_payment_percent=down_payment_percent,
+        interest_rate=interest_rate, loan_term_years=loan_term_years,
+        property_tax_rate=property_tax_rate, insurance_rate=insurance_rate,
+        hoa_monthly=hoa_monthly, loan_type=loan_type,
         pmi_rate=pmi_rate,
     )
 
