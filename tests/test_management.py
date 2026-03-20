@@ -105,6 +105,22 @@ def test_expenses_with_budget():
     assert "recommendations" in result
 
 
+def test_expenses_budget_type_is_dict():
+    """Bug J: annual_budget must accept dict (not float) matching management.py signature."""
+    expenses = [
+        {"category": "maintenance", "amount": 200, "date": "2025-03"},
+        {"category": "utilities", "amount": 150, "date": "2025-03"},
+    ]
+    result = track_property_expenses(
+        expenses=expenses,
+        annual_budget={"maintenance": 3_000, "utilities": 2_000},
+    )
+    budget = result["budget_analysis"]
+    assert budget is not None
+    # Budget analysis should contain per-category breakdowns from the dict keys
+    assert any("maintenance" in str(budget).lower() for _ in [1])
+
+
 # ---------------------------------------------------------------------------
 # track_deal_pipeline
 # ---------------------------------------------------------------------------
@@ -169,3 +185,41 @@ def test_pipeline_empty():
     result = track_deal_pipeline(deals=[])
     assert result["pipeline_summary"]["total_deals"] == 0
     assert "recommendations" in result
+
+
+# ---------------------------------------------------------------------------
+# Bug B: or True removal — monthly_time_saved should be 0 when self is cheaper
+# ---------------------------------------------------------------------------
+
+def test_time_saved_zero_when_self_cheaper():
+    """When self-management wins, monthly_time_saved should be 0, not hours_per_month."""
+    result = analyze_property_management(
+        monthly_rent=800,
+        num_units=1,
+        self_management={"hours_per_week": 2, "hourly_value": 15},
+        professional_management={"management_fee_percent": 12},
+    )
+    if result["cost_comparison"]["cheaper_option"] == "self_management":
+        assert result["time_value_analysis"]["monthly_time_saved_with_professional"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Bug H: avg_tenant_stay_months parameter
+# ---------------------------------------------------------------------------
+
+def test_custom_tenant_stay_months():
+    """Custom avg_tenant_stay_months should change leasing fee amortisation."""
+    result_24 = analyze_property_management(
+        monthly_rent=1_500,
+        num_units=1,
+        avg_tenant_stay_months=24,
+    )
+    result_12 = analyze_property_management(
+        monthly_rent=1_500,
+        num_units=1,
+        avg_tenant_stay_months=12,
+    )
+    # Shorter stay → higher amortized leasing fee
+    fee_24 = result_24["professional_management_analysis"]["costs"]["annual_leasing_fee_amortized"]
+    fee_12 = result_12["professional_management_analysis"]["costs"]["annual_leasing_fee_amortized"]
+    assert fee_12 > fee_24

@@ -13,8 +13,20 @@ def calculate_mortgage_payment(principal: float, monthly_rate: float, num_paymen
     )
 
 
-def calculate_irr(cash_flows: list[float], guess: float = 0.1) -> float:
-    """Calculate Internal Rate of Return using Newton's method."""
+def calculate_irr(cash_flows: list[float], guess: float = 0.1) -> float | None:
+    """Calculate Internal Rate of Return using Newton's method.
+
+    Returns None if cash flows have no sign change or if convergence fails.
+    """
+    if not cash_flows:
+        return None
+
+    # Sign-change validation: need both positive and negative cash flows
+    has_positive = any(cf > 0 for cf in cash_flows)
+    has_negative = any(cf < 0 for cf in cash_flows)
+    if not (has_positive and has_negative):
+        return None
+
     max_iterations = 100
     tolerance = 1e-5
     rate = guess
@@ -35,7 +47,7 @@ def calculate_irr(cash_flows: list[float], guess: float = 0.1) -> float:
         if result is not None:
             return result
 
-    return 0.0
+    return None
 
 
 def _irr_with_guess(cash_flows: list[float], guess: float) -> float | None:
@@ -55,11 +67,26 @@ def _irr_with_guess(cash_flows: list[float], guess: float) -> float | None:
 
 def calculate_npv(cash_flows: list[float], rate: float) -> float:
     """Calculate Net Present Value."""
+    if not cash_flows:
+        return 0.0
+    if rate == -1:
+        return float("inf")
     return sum(cf / (1 + rate) ** i for i, cf in enumerate(cash_flows))
 
 
 def _derivative_npv(cash_flows: list[float], rate: float) -> float:
     return sum(-i * cf / (1 + rate) ** (i + 1) for i, cf in enumerate(cash_flows) if i > 0)
+
+
+def safe_irr_pct(cash_flows: list[float], guess: float = 0.1) -> tuple[float, bool]:
+    """Calculate IRR as a percentage, returning (value, converged).
+
+    Returns (0.0, False) when IRR cannot be computed.
+    """
+    result = calculate_irr(cash_flows, guess)
+    if result is None:
+        return 0.0, False
+    return result * 100, True
 
 
 def round2(value: float) -> float:

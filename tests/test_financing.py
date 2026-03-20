@@ -16,7 +16,6 @@ def test_refinance_rate_drop():
     result = analyze_refinance(
         current_loan_balance=280_000,
         current_interest_rate=7.5,
-        current_monthly_payment=1_958,
         current_remaining_years=27,
         new_interest_rate=6.0,
         new_closing_costs=4_000,
@@ -32,7 +31,6 @@ def test_refinance_cash_out():
     result = analyze_refinance(
         current_loan_balance=200_000,
         current_interest_rate=7.0,
-        current_monthly_payment=1_331,
         current_remaining_years=25,
         new_interest_rate=6.75,
         new_closing_costs=5_000,
@@ -48,7 +46,6 @@ def test_refinance_break_even():
     result = analyze_refinance(
         current_loan_balance=300_000,
         current_interest_rate=8.0,
-        current_monthly_payment=2_201,
         current_remaining_years=28,
         new_interest_rate=6.5,
         new_closing_costs=6_000,
@@ -186,3 +183,31 @@ def test_seller_financing_below_market():
     )
     assert "payment_schedule" in result
     assert "recommendations" in result
+
+
+# ---------------------------------------------------------------------------
+# Refinance: verify computed payment matches manual calculation
+# ---------------------------------------------------------------------------
+
+def test_refinance_computed_payment():
+    """Verify that removing current_monthly_payment and computing it gives correct results."""
+    from src.reicalc_mcp.calculators._common import calculate_mortgage_payment
+
+    balance = 250_000
+    rate = 7.0
+    years = 25
+
+    result = analyze_refinance(
+        current_loan_balance=balance,
+        current_interest_rate=rate,
+        current_remaining_years=years,
+        new_interest_rate=6.0,
+    )
+
+    # The computed current monthly payment should match manual calculation
+    expected = calculate_mortgage_payment(balance, rate / 100 / 12, int(years * 12))
+    actual = result["current_loan"]["monthly_payment"]
+    assert abs(actual - round(expected, 2)) < 0.01
+
+    # Monthly savings should be positive (dropping from 7% to 6%)
+    assert result["monthly_comparison"]["monthly_savings"] > 0

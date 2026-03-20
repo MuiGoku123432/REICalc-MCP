@@ -253,6 +253,88 @@ def test_market_comps_confidence():
     assert "statistical_analysis" in result
 
 
+# ---------------------------------------------------------------------------
+# Bug fix: 2026 LTCG bracket verification
+# ---------------------------------------------------------------------------
+
+def test_capital_gains_2026_brackets_single():
+    """Verify 2026 LTCG brackets: single filer at $100k other income should get 15% rate."""
+    from src.reicalc_mcp.calculators.advanced import _federal_ltcg_rate
+
+    # Single: 0% up to $49,450, 15% up to $545,500, 20% above
+    assert _federal_ltcg_rate(49_000, "single") == 0.0
+    assert _federal_ltcg_rate(50_000, "single") == 15.0
+    assert _federal_ltcg_rate(545_000, "single") == 15.0
+    assert _federal_ltcg_rate(546_000, "single") == 20.0
+
+
+def test_capital_gains_2026_brackets_married():
+    """Verify 2026 LTCG brackets: married filing jointly."""
+    from src.reicalc_mcp.calculators.advanced import _federal_ltcg_rate
+
+    # Married: 0% up to $98,900, 15% up to $613,700, 20% above
+    assert _federal_ltcg_rate(98_000, "married") == 0.0
+    assert _federal_ltcg_rate(99_000, "married") == 15.0
+    assert _federal_ltcg_rate(613_000, "married") == 15.0
+    assert _federal_ltcg_rate(614_000, "married") == 20.0
+
+
+def test_capital_gains_full_calculation_2026():
+    """$500k sale, $300k purchase, single, $100k other income — should use 2026 15% bracket."""
+    result = calculate_capital_gains_tax(
+        sale_price=500_000,
+        purchase_price=300_000,
+        holding_period_years=5,
+        filing_status="single",
+        other_income=100_000,
+        state="TX",  # 0% state tax to isolate federal
+    )
+    # Taxable income = $100k + gain. Federal rate should be 15% (well within $545,500 ceiling)
+    assert result["tax_liability"]["federal_rate"] == 15.0
+
+
+def test_market_comps_dynamic_analysis_date():
+    """analysis_date should reflect today, not a hardcoded string."""
+    import datetime
+    result = analyze_market_comps(
+        subject_property={
+            "square_feet": 1_500,
+            "bedrooms": 3,
+            "bathrooms": 2,
+            "year_built": 2000,
+            "condition": "average",
+            "lot_size": 6_000,
+        },
+        comparable_properties=[
+            {
+                "address": "Comp A",
+                "sale_price": 300_000,
+                "square_feet": 1_550,
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "year_built": 2001,
+                "distance_miles": 0.3,
+                "sale_date": "2026-01-15",
+                "lot_size": 6_200,
+            },
+        ],
+    )
+    assert result["cma_report"]["analysis_date"] == datetime.date.today().isoformat()
+
+
+def test_rent_vs_buy_wrapper_param_order():
+    """Verify keyword args route home_price and annual_rent_increase correctly."""
+    result = analyze_rent_vs_buy(
+        monthly_rent=2_000,
+        home_price=400_000,
+        annual_rent_increase=3.0,
+    )
+    # If params were swapped, buying initial outlay would be nonsensical
+    # $400k home with 20% down → $80k down + 3% closing = $92k initial outlay
+    initial = result["total_cost_summary"]["buying"]["initial_outlay"]
+    assert 80_000 < initial < 110_000, f"Initial outlay {initial} suggests home_price is wrong"
+
+
 def test_market_comps_cma_report():
     result = analyze_market_comps(
         subject_property={

@@ -3,6 +3,7 @@
 from typing import Any
 
 from ._common import calculate_mortgage_payment, calculate_irr, calculate_npv, round2
+from ._validation import validate_positive, validate_range
 
 
 # ---------------------------------------------------------------------------
@@ -12,7 +13,6 @@ from ._common import calculate_mortgage_payment, calculate_irr, calculate_npv, r
 def analyze_refinance(
     current_loan_balance: float,
     current_interest_rate: float,
-    current_monthly_payment: float,
     current_remaining_years: float,
     new_interest_rate: float,
     new_loan_term_years: int = 30,
@@ -22,9 +22,18 @@ def analyze_refinance(
 ) -> dict:
     """Analyze whether refinancing a mortgage makes financial sense."""
 
+    validate_positive(current_loan_balance, "current_loan_balance")
+    validate_range(current_interest_rate, "current_interest_rate", 0, 100)
+    validate_positive(current_remaining_years, "current_remaining_years")
+    validate_range(new_interest_rate, "new_interest_rate", 0, 100)
+
     # --- Current loan ---
     current_monthly_rate = current_interest_rate / 100 / 12
     current_remaining_months = int(current_remaining_years * 12)
+    # Compute current monthly payment from loan parameters
+    current_monthly_payment = calculate_mortgage_payment(
+        current_loan_balance, current_monthly_rate, current_remaining_months,
+    )
     current_total_remaining = current_monthly_payment * current_remaining_months
     current_total_interest = current_total_remaining - current_loan_balance
 
@@ -281,6 +290,9 @@ def analyze_construction_loan(
     draw_schedule: list[dict[str, Any]] | None = None,
 ) -> dict:
     """Analyze a construction-to-permanent loan scenario."""
+
+    validate_positive(land_cost, "land_cost")
+    validate_positive(construction_budget, "construction_budget")
 
     # --- Project summary ---
     contingency = construction_budget * contingency_percent / 100
@@ -549,6 +561,9 @@ def analyze_hard_money_loan(
     after_repair_value: float | None = None,
 ) -> dict:
     """Analyze a hard money loan for fix-and-flip or bridge financing."""
+
+    validate_positive(property_value, "property_value")
+    validate_positive(purchase_price, "purchase_price")
 
     if exit_strategy not in ("refinance", "sell", "hold"):
         raise ValueError(f"Invalid exit_strategy '{exit_strategy}'. Must be refinance, sell, or hold.")
@@ -945,6 +960,11 @@ def analyze_seller_financing(
     buyer_credit_score: int | None = None,
 ) -> dict:
     """Analyze a seller-financed real estate transaction."""
+
+    validate_positive(purchase_price, "purchase_price")
+    validate_positive(down_payment, "down_payment")
+    validate_range(interest_rate, "interest_rate", 0, 100)
+    validate_positive(loan_term_years, "loan_term_years")
 
     loan_amount = purchase_price - down_payment
     monthly_rate = interest_rate / 100 / 12

@@ -1,6 +1,7 @@
 """Investment strategy calculators: Airbnb/STR, 1031 Exchange, Wholesale, Subject-To."""
 
-from ._common import calculate_mortgage_payment, calculate_irr, round2
+from ._common import calculate_mortgage_payment, calculate_irr, safe_irr_pct, round2
+from ._validation import validate_positive, validate_non_negative, validate_percent
 
 
 # ---------------------------------------------------------------------------
@@ -20,8 +21,13 @@ def analyze_airbnb_str(
     seasonal_adjustment: dict[str, float] | None = None,
     furnishing_cost: float = 0,
     platform_fee_percent: float = 3,
+    ltr_rent_estimate: float | None = None,
 ) -> dict:
     """Analyze an Airbnb / short-term rental deal and compare to long-term rental."""
+
+    validate_positive(purchase_price, "purchase_price")
+    validate_positive(average_daily_rate, "average_daily_rate")
+    validate_percent(occupancy_rate, "occupancy_rate")
 
     # --- Financing ---
     down_payment = purchase_price * down_payment_percent / 100
@@ -57,8 +63,8 @@ def analyze_airbnb_str(
     monthly_cash_flow_str = monthly_net_revenue - monthly_mortgage
     annual_cash_flow_str = monthly_cash_flow_str * 12
 
-    # --- Long-term rental estimate (0.7 % of purchase price per month) ---
-    monthly_ltr_rent = purchase_price * 0.007
+    # --- Long-term rental estimate (0.7 % of purchase price per month, or user-supplied) ---
+    monthly_ltr_rent = ltr_rent_estimate if ltr_rent_estimate is not None else purchase_price * 0.007
     annual_ltr_gross = monthly_ltr_rent * 12
     # Assume 8 % vacancy, 10 % management for LTR
     annual_ltr_net = annual_ltr_gross * (1 - 0.08) * (1 - 0.10) - annual_operating_expenses
@@ -482,13 +488,18 @@ def analyze_wholesale_deal(
     holding_costs_monthly: float = 0,
     estimated_closing_costs: float = 0,
     target_buyer_type: str = "investor",
+    estimated_rehab_months: int = 6,
+    ltr_rent_estimate: float | None = None,
 ) -> dict:
     """Analyze a wholesale real estate deal from both wholesaler and end-buyer perspectives."""
 
+    validate_positive(contract_price, "contract_price")
+    validate_positive(after_repair_value, "after_repair_value")
+    validate_non_negative(estimated_rehab_cost, "estimated_rehab_cost")
+    validate_non_negative(assignment_fee, "assignment_fee")
+
     # --- End buyer all-in cost ---
     end_buyer_purchase = contract_price + assignment_fee
-    # Assume 6-month rehab for holding costs if monthly holding costs provided
-    estimated_rehab_months = 6
     total_holding_costs = holding_costs_monthly * estimated_rehab_months
     end_buyer_all_in = end_buyer_purchase + estimated_rehab_cost + estimated_closing_costs + total_holding_costs
 
@@ -513,7 +524,7 @@ def analyze_wholesale_deal(
     )
 
     # For landlord: estimate rental income
-    monthly_rent_estimate = after_repair_value * 0.007
+    monthly_rent_estimate = ltr_rent_estimate if ltr_rent_estimate is not None else after_repair_value * 0.007
     annual_rent = monthly_rent_estimate * 12
     # Assume 50% expense ratio for rental
     annual_noi = annual_rent * 0.50
@@ -693,14 +704,31 @@ def analyze_subject_to_deal(
     purchase_price: float,
     existing_loan_balance: float,
     existing_interest_rate: float,
-    existing_monthly_payment: float,
     existing_loan_remaining_years: float,
     monthly_rent: float,
     monthly_expenses: float = 0,
     down_payment_to_seller: float = 0,
     property_value: float | None = None,
+    appreciation_rate: float = 3.0,
+    rent_growth_rate: float = 2.0,
 ) -> dict:
-    """Analyze a subject-to (existing financing) acquisition."""
+    """Analyze a subject-to (existing financing) acquisition.
+
+    appreciation_rate: annual property appreciation as a percentage (default 3%).
+    rent_growth_rate: annual rent increase as a percentage (default 2%).
+    """
+
+    validate_positive(purchase_price, "purchase_price")
+    validate_positive(existing_loan_balance, "existing_loan_balance")
+    validate_positive(existing_loan_remaining_years, "existing_loan_remaining_years")
+    validate_positive(monthly_rent, "monthly_rent")
+
+    # Compute existing monthly payment from loan parameters
+    existing_monthly_payment = calculate_mortgage_payment(
+        existing_loan_balance,
+        existing_interest_rate / 100 / 12,
+        int(existing_loan_remaining_years * 12),
+    )
 
     market_value = property_value if property_value is not None else purchase_price
 
@@ -741,19 +769,21 @@ def analyze_subject_to_deal(
         monthly_expenses,
         market_value,
         years=5,
+        appreciation_rate=appreciation_rate / 100,
+        rent_growth_rate=rent_growth_rate / 100,
     )
 
     # --- Investment returns ---
     # IRR: initial outlay, then monthly cash flows, then sale in year 5
-    appreciation_rate = 0.03  # 3 % annual
-    future_value_5yr = market_value * (1 + appreciation_rate) ** 5
+    appreciation_rate_dec = appreciation_rate / 100
+    future_value_5yr = market_value * (1 + appreciation_rate_dec) ** 5
     remaining_balance_5yr = projection[-1]["remaining_loan_balance"]
     sale_proceeds_5yr = future_value_5yr - remaining_balance_5yr - future_value_5yr * 0.06  # 6 % selling costs
     irr_cash_flows = [-total_cash_needed]
     for year_data in projection:
         irr_cash_flows.append(year_data["annual_cash_flow"])
     irr_cash_flows[-1] += sale_proceeds_5yr  # add sale proceeds to final year
-    annual_irr = calculate_irr(irr_cash_flows) * 100
+    annual_irr, _ = safe_irr_pct(irr_cash_flows)
 
     # --- Risk assessment ---
     risk_assessment = _subject_to_risk_assessment(
@@ -839,12 +869,12 @@ def _subject_to_projection(
     monthly_expenses: float,
     market_value: float,
     years: int = 5,
+    appreciation_rate: float = 0.03,
+    rent_growth_rate: float = 0.02,
 ) -> list[dict]:
     """Project year-by-year financials for a subject-to deal."""
     projection: list[dict] = []
     balance = loan_balance
-    appreciation_rate = 0.03
-    rent_growth_rate = 0.02
     current_rent = monthly_rent
     current_value = market_value
 

@@ -3,6 +3,7 @@
 from typing import Any
 
 from ._common import calculate_mortgage_payment, round2
+from ._validation import validate_positive, validate_non_negative, validate_range, validate_percent
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +27,11 @@ def calculate_mortgage_affordability(
     hoa_monthly: float = 0,
 ) -> dict:
     """Calculate maximum affordable home price using 28/36 DTI rules."""
+
+    validate_positive(annual_income, "annual_income")
+    validate_non_negative(down_payment, "down_payment")
+    validate_range(interest_rate, "interest_rate", 0, 100)
+    validate_range(loan_term, "loan_term", 1, 50)
 
     # Income analysis
     total_annual = annual_income + co_borrower_income
@@ -311,7 +317,7 @@ _LOAN_TYPE_LIMITS: dict[str, tuple[float, float]] = {
 
 def analyze_debt_to_income(
     monthly_income: float,
-    proposed_housing_payment: float,
+    proposed_housing_payment: float = 0,
     car_payments: float = 0,
     credit_card_minimums: float = 0,
     student_loans: float = 0,
@@ -319,8 +325,37 @@ def analyze_debt_to_income(
     child_support_alimony: float = 0,
     other_debts: float = 0,
     loan_type: str = "conventional",
+    purchase_price: float | None = None,
+    down_payment: float | None = None,
+    interest_rate: float | None = None,
+    loan_term_years: int = 30,
+    property_tax_rate: float = 1.2,
+    insurance_rate: float = 0.5,
+    hoa_monthly: float = 0,
+    pmi_rate: float = 0.5,
 ) -> dict:
-    """Analyze debt-to-income ratios for loan qualification."""
+    """Analyze debt-to-income ratios for loan qualification.
+
+    If purchase_price, down_payment, and interest_rate are provided,
+    proposed_housing_payment is computed internally as PITI.
+
+    pmi_rate: annual PMI rate as a percentage of the loan amount (default 0.5%).
+    """
+
+    # Compute housing payment from loan details if provided
+    if purchase_price is not None and down_payment is not None and interest_rate is not None:
+        loan_amount = purchase_price - down_payment
+        monthly_rate = interest_rate / 100 / 12
+        num_payments = loan_term_years * 12
+        pi = calculate_mortgage_payment(loan_amount, monthly_rate, num_payments)
+        prop_tax = purchase_price * (property_tax_rate / 100) / 12
+        insurance = purchase_price * (insurance_rate / 100) / 12
+        dp_pct = (down_payment / purchase_price * 100) if purchase_price > 0 else 0
+        pmi = (loan_amount * (pmi_rate / 100) / 12) if dp_pct < 20 else 0
+        proposed_housing_payment = pi + prop_tax + insurance + pmi + hoa_monthly
+
+    validate_positive(monthly_income, "monthly_income")
+    validate_non_negative(proposed_housing_payment, "proposed_housing_payment")
 
     if loan_type not in _LOAN_TYPE_LIMITS:
         raise ValueError(f"Invalid loan_type '{loan_type}'. Must be one of: {', '.join(_LOAN_TYPE_LIMITS)}")
@@ -528,6 +563,8 @@ def compare_loans(
     comparison_period_years: int = 5,
 ) -> dict:
     """Compare multiple loan options side by side."""
+
+    validate_positive(home_price, "home_price")
 
     prop_tax_monthly = property_tax_annual / 12
     insurance_monthly = home_insurance_annual / 12

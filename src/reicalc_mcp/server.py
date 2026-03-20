@@ -70,11 +70,15 @@ def calculate_affordability_tool(
     insurance_rate: float = 0.5,
     hoa_monthly: float = 0,
     loan_term_years: int = 30,
+    pmi_rate: float = 0.5,
 ) -> dict:
     """Calculate how much house you can afford based on income, debts, and down payment."""
     return calculate_affordability(
-        annual_income, monthly_debts, down_payment, interest_rate,
-        property_tax_rate, insurance_rate, hoa_monthly, loan_term_years,
+        annual_income=annual_income, monthly_debts=monthly_debts,
+        down_payment=down_payment, interest_rate=interest_rate,
+        property_tax_rate=property_tax_rate, insurance_rate=insurance_rate,
+        hoa_monthly=hoa_monthly, loan_term_years=loan_term_years,
+        pmi_rate=pmi_rate,
     )
 
 
@@ -93,13 +97,23 @@ def analyze_brrrr_deal_tool(
     monthly_expenses: float = 600,
     vacancy_rate: float = 5,
     holding_months: int = 6,
+    purchase_loan_term_years: int = 30,
+    refinance_loan_term_years: int = 30,
 ) -> dict:
     """Analyze a BRRRR (Buy, Rehab, Rent, Refinance, Repeat) real estate deal."""
     return analyze_brrrr_deal(
-        purchase_price, rehab_cost, after_repair_value, monthly_rent,
-        down_payment_percent, purchase_interest_rate, refinance_ltv,
-        refinance_interest_rate, closing_costs, refinance_closing_costs,
-        monthly_expenses, vacancy_rate, holding_months,
+        purchase_price=purchase_price, rehab_cost=rehab_cost,
+        after_repair_value=after_repair_value, monthly_rent=monthly_rent,
+        down_payment_percent=down_payment_percent,
+        purchase_interest_rate=purchase_interest_rate,
+        refinance_ltv=refinance_ltv,
+        refinance_interest_rate=refinance_interest_rate,
+        closing_costs=closing_costs,
+        refinance_closing_costs=refinance_closing_costs,
+        monthly_expenses=monthly_expenses, vacancy_rate=vacancy_rate,
+        holding_months=holding_months,
+        purchase_loan_term_years=purchase_loan_term_years,
+        refinance_loan_term_years=refinance_loan_term_years,
     )
 
 
@@ -108,19 +122,40 @@ def evaluate_house_hack_tool(
     purchase_price: float,
     down_payment: float,
     monthly_rent_unit2: float,
-    owner_expenses: float,
+    interest_rate: float,
+    loan_term_years: int = 30,
+    property_tax_rate: float = 1.2,
+    insurance_rate: float = 0.5,
+    hoa_monthly: float = 0,
+    pmi_rate: float = 0.5,
+    additional_expenses: float = 0,
 ) -> dict:
-    """Calculate returns from house hacking (living in one unit and renting others)."""
-    return evaluate_house_hack(purchase_price, down_payment, monthly_rent_unit2, owner_expenses)
+    """Calculate returns from house hacking (living in one unit and renting others). Computes PITI internally."""
+    return evaluate_house_hack(
+        purchase_price=purchase_price, down_payment=down_payment,
+        monthly_rent_unit2=monthly_rent_unit2, interest_rate=interest_rate,
+        loan_term_years=loan_term_years, property_tax_rate=property_tax_rate,
+        insurance_rate=insurance_rate, hoa_monthly=hoa_monthly,
+        pmi_rate=pmi_rate, additional_expenses=additional_expenses,
+    )
 
 
 @mcp.tool()
 def project_portfolio_growth_tool(
     starting_capital: float,
     years_to_project: int = 20,
+    annual_growth_rate: float = 8.0,
+    avg_property_cost: float = 50000,
+    leverage_multiplier: float = 3.0,
 ) -> dict:
-    """Project real estate portfolio growth over 20 years."""
-    return project_portfolio_growth(starting_capital, years_to_project)
+    """Project real estate portfolio growth over time."""
+    return project_portfolio_growth(
+        starting_capital=starting_capital,
+        years_to_project=years_to_project,
+        annual_growth_rate=annual_growth_rate,
+        avg_property_cost=avg_property_cost,
+        leverage_multiplier=leverage_multiplier,
+    )
 
 
 @mcp.tool()
@@ -131,7 +166,10 @@ def analyze_syndication_tool(
     preferred_return: float = 8,
 ) -> dict:
     """Evaluate a real estate syndication investment opportunity."""
-    return analyze_syndication(investment_amount, projected_irr, hold_period, preferred_return)
+    return analyze_syndication(
+        investment_amount=investment_amount, projected_irr=projected_irr,
+        hold_period=hold_period, preferred_return=preferred_return,
+    )
 
 
 # ── Lending calculators ───────────────────────────────────────────────────────
@@ -155,18 +193,22 @@ def calculate_mortgage_affordability_tool(
 ) -> dict:
     """Advanced mortgage affordability calculator with dual income and detailed DTI analysis."""
     return calculate_mortgage_affordability(
-        annual_income, down_payment, interest_rate,
-        co_borrower_income, other_monthly_income, car_payment,
-        student_loans, credit_cards, other_debts,
-        down_payment_percent, loan_term, property_tax_rate,
-        insurance_annual, hoa_monthly,
+        annual_income=annual_income, down_payment=down_payment,
+        interest_rate=interest_rate,
+        co_borrower_income=co_borrower_income,
+        other_monthly_income=other_monthly_income,
+        car_payment=car_payment, student_loans=student_loans,
+        credit_cards=credit_cards, other_debts=other_debts,
+        down_payment_percent=down_payment_percent, loan_term=loan_term,
+        property_tax_rate=property_tax_rate,
+        insurance_annual=insurance_annual, hoa_monthly=hoa_monthly,
     )
 
 
 @mcp.tool()
 def analyze_debt_to_income_tool(
     monthly_income: float,
-    proposed_housing_payment: float,
+    proposed_housing_payment: float = 0,
     car_payments: float = 0,
     credit_card_minimums: float = 0,
     student_loans: float = 0,
@@ -174,12 +216,29 @@ def analyze_debt_to_income_tool(
     child_support_alimony: float = 0,
     other_debts: float = 0,
     loan_type: str = "conventional",
+    purchase_price: float | None = None,
+    down_payment: float | None = None,
+    interest_rate: float | None = None,
+    loan_term_years: int = 30,
+    property_tax_rate: float = 1.2,
+    insurance_rate: float = 0.5,
+    hoa_monthly: float = 0,
+    pmi_rate: float = 0.5,
 ) -> dict:
-    """Analyze debt-to-income ratios for mortgage qualification with different loan types."""
+    """Analyze debt-to-income ratios for mortgage qualification. Can compute PITI from loan details."""
     return analyze_debt_to_income(
-        monthly_income, proposed_housing_payment,
-        car_payments, credit_card_minimums, student_loans,
-        personal_loans, child_support_alimony, other_debts, loan_type,
+        monthly_income=monthly_income,
+        proposed_housing_payment=proposed_housing_payment,
+        car_payments=car_payments,
+        credit_card_minimums=credit_card_minimums,
+        student_loans=student_loans, personal_loans=personal_loans,
+        child_support_alimony=child_support_alimony,
+        other_debts=other_debts, loan_type=loan_type,
+        purchase_price=purchase_price, down_payment=down_payment,
+        interest_rate=interest_rate, loan_term_years=loan_term_years,
+        property_tax_rate=property_tax_rate,
+        insurance_rate=insurance_rate, hoa_monthly=hoa_monthly,
+        pmi_rate=pmi_rate,
     )
 
 
@@ -194,8 +253,11 @@ def compare_loans_tool(
 ) -> dict:
     """Compare multiple mortgage loan scenarios side by side to find the best option."""
     return compare_loans(
-        home_price, loans, property_tax_annual,
-        home_insurance_annual, hoa_monthly, comparison_period_years,
+        home_price=home_price, loans=loans,
+        property_tax_annual=property_tax_annual,
+        home_insurance_annual=home_insurance_annual,
+        hoa_monthly=hoa_monthly,
+        comparison_period_years=comparison_period_years,
     )
 
 
@@ -213,9 +275,13 @@ def calculate_irr(
 ) -> dict:
     """Calculate Internal Rate of Return (IRR) for real estate investments with cash flow analysis."""
     return calculate_irr_tool(
-        initial_investment, annual_cash_flows, projected_sale_price,
-        selling_costs_percent, loan_balance_at_sale, target_irr,
-        holding_period_years,
+        initial_investment=initial_investment,
+        annual_cash_flows=annual_cash_flows,
+        projected_sale_price=projected_sale_price,
+        selling_costs_percent=selling_costs_percent,
+        loan_balance_at_sale=loan_balance_at_sale,
+        target_irr=target_irr,
+        holding_period_years=holding_period_years,
     )
 
 
@@ -236,10 +302,16 @@ def analyze_fix_flip_tool(
 ) -> dict:
     """Analyze profitability of fix and flip real estate investments with detailed cost breakdown."""
     return analyze_fix_flip(
-        purchase_price, rehab_budget, after_repair_value,
-        purchase_closing_costs, holding_period_months, financing_type,
-        down_payment_percent, interest_rate, loan_points,
-        monthly_holding_costs, selling_costs_percent, contingency_percent,
+        purchase_price=purchase_price, rehab_budget=rehab_budget,
+        after_repair_value=after_repair_value,
+        purchase_closing_costs=purchase_closing_costs,
+        holding_period_months=holding_period_months,
+        financing_type=financing_type,
+        down_payment_percent=down_payment_percent,
+        interest_rate=interest_rate, loan_points=loan_points,
+        monthly_holding_costs=monthly_holding_costs,
+        selling_costs_percent=selling_costs_percent,
+        contingency_percent=contingency_percent,
     )
 
 
@@ -255,9 +327,10 @@ def calculate_npv(
 ) -> dict:
     """Calculate Net Present Value for real estate investment decisions."""
     return calculate_npv_tool(
-        initial_investment, cash_flows, discount_rate,
-        terminal_value, terminal_period, inflation_rate,
-        comparison_investment,
+        initial_investment=initial_investment, cash_flows=cash_flows,
+        discount_rate=discount_rate, terminal_value=terminal_value,
+        terminal_period=terminal_period, inflation_rate=inflation_rate,
+        comparison_investment=comparison_investment,
     )
 
 
@@ -272,12 +345,20 @@ def calculate_cocr_tool(
     vacancy_rate: float = 5,
     loan_details: dict | None = None,
     reserve_fund_percent: float = 5,
+    rent_growth: float = 0.03,
+    expense_growth: float = 0.025,
+    appreciation_rate: float = 0.04,
 ) -> dict:
     """Calculate Cash-on-Cash Return with detailed expense analysis and projections."""
     return calculate_cocr(
-        purchase_price, down_payment, annual_rental_income,
-        closing_costs, renovation_costs, annual_expenses or {},
-        vacancy_rate, loan_details or {}, reserve_fund_percent,
+        purchase_price=purchase_price, down_payment=down_payment,
+        closing_costs=closing_costs, renovation_costs=renovation_costs,
+        annual_rental_income=annual_rental_income,
+        annual_expenses=annual_expenses or {},
+        vacancy_rate=vacancy_rate, loan_details=loan_details or {},
+        reserve_fund_percent=reserve_fund_percent,
+        rent_growth=rent_growth, expense_growth=expense_growth,
+        appreciation_rate=appreciation_rate,
     )
 
 
@@ -290,8 +371,10 @@ def calculate_dscr_tool(
 ) -> dict:
     """Calculate Debt Service Coverage Ratio for investment property loans."""
     return calculate_dscr(
-        property_income, property_expenses or {},
-        loan_details, property_details or {},
+        property_income=property_income,
+        property_expenses=property_expenses or {},
+        loan_details=loan_details,
+        property_details=property_details or {},
     )
 
 
@@ -305,9 +388,11 @@ def analyze_breakeven_tool(
 ) -> dict:
     """Calculate breakeven points for occupancy, rent, and ROI for real estate investments."""
     return analyze_breakeven(
-        property_costs, revenue_streams,
-        fixed_costs or {}, variable_costs or {},
-        analysis_parameters or {},
+        property_costs=property_costs,
+        revenue_streams=revenue_streams,
+        fixed_costs=fixed_costs or {},
+        variable_costs=variable_costs or {},
+        analysis_parameters=analysis_parameters or {},
     )
 
 
@@ -322,10 +407,10 @@ def analyze_sensitivity_tool(
 ) -> dict:
     """Perform multi-variable sensitivity analysis on real estate investments."""
     return analyze_sensitivity(
-        base_scenario,
-        sensitivity_variables,
-        analysis_metrics,
-        discount_rate,
+        base_scenario=base_scenario,
+        sensitivity_variables=sensitivity_variables,
+        analysis_metrics=analysis_metrics,
+        discount_rate=discount_rate,
     )
 
 
@@ -338,8 +423,10 @@ def run_monte_carlo_tool(
 ) -> dict:
     """Run Monte Carlo simulation to assess investment risk and return probabilities."""
     return run_monte_carlo(
-        investment_parameters, variable_distributions,
-        simulation_settings or {}, target_metrics or {},
+        investment_parameters=investment_parameters,
+        variable_distributions=variable_distributions,
+        simulation_settings=simulation_settings or {},
+        target_metrics=target_metrics or {},
     )
 
 
@@ -354,9 +441,12 @@ def calculate_tax_benefits_tool(
 ) -> dict:
     """Calculate depreciation, deductions, and tax savings for real estate investments."""
     return calculate_tax_benefits(
-        property_details, income_expenses, taxpayer_info,
-        loan_details or {}, cost_segregation_breakdown or {},
-        analysis_options or {},
+        property_details=property_details,
+        income_expenses=income_expenses,
+        loan_details=loan_details or {},
+        taxpayer_info=taxpayer_info,
+        cost_segregation_breakdown=cost_segregation_breakdown or {},
+        analysis_options=analysis_options or {},
     )
 
 
@@ -367,7 +457,10 @@ def compare_properties_tool(
     comparison_criteria: dict | None = None,
 ) -> dict:
     """Compare multiple investment properties side by side with comprehensive analysis."""
-    return compare_properties(properties, loan_terms or {}, comparison_criteria or {})
+    return compare_properties(
+        properties=properties, loan_terms=loan_terms or {},
+        comparison_criteria=comparison_criteria or {},
+    )
 
 
 # ── Financing calculators ────────────────────────────────────────────────────
@@ -376,7 +469,6 @@ def compare_properties_tool(
 def analyze_refinance_tool(
     current_loan_balance: float,
     current_interest_rate: float,
-    current_monthly_payment: float,
     current_remaining_years: float,
     new_interest_rate: float,
     new_loan_term_years: int = 30,
@@ -384,12 +476,16 @@ def analyze_refinance_tool(
     cash_out_amount: float = 0,
     property_value: float = 0,
 ) -> dict:
-    """Analyze whether refinancing your mortgage makes financial sense with break-even and NPV analysis."""
+    """Analyze whether refinancing your mortgage makes financial sense. Computes current payment internally."""
     return analyze_refinance(
-        current_loan_balance, current_interest_rate,
-        current_monthly_payment, current_remaining_years,
-        new_interest_rate, new_loan_term_years,
-        new_closing_costs, cash_out_amount, property_value,
+        current_loan_balance=current_loan_balance,
+        current_interest_rate=current_interest_rate,
+        current_remaining_years=current_remaining_years,
+        new_interest_rate=new_interest_rate,
+        new_loan_term_years=new_loan_term_years,
+        new_closing_costs=new_closing_costs,
+        cash_out_amount=cash_out_amount,
+        property_value=property_value,
     )
 
 
@@ -408,10 +504,15 @@ def analyze_construction_loan_tool(
 ) -> dict:
     """Analyze construction loan financing, draw schedules, interest costs, and permanent conversion."""
     return analyze_construction_loan(
-        land_cost, construction_budget, total_project_cost,
-        construction_period_months, interest_rate, down_payment_percent,
-        permanent_loan_rate, permanent_loan_term, contingency_percent,
-        draw_schedule,
+        land_cost=land_cost, construction_budget=construction_budget,
+        total_project_cost=total_project_cost,
+        construction_period_months=construction_period_months,
+        interest_rate=interest_rate,
+        down_payment_percent=down_payment_percent,
+        permanent_loan_rate=permanent_loan_rate,
+        permanent_loan_term=permanent_loan_term,
+        contingency_percent=contingency_percent,
+        draw_schedule=draw_schedule,
     )
 
 
@@ -429,9 +530,12 @@ def analyze_hard_money_loan_tool(
 ) -> dict:
     """Analyze hard money loans for real estate projects with cost analysis and risk assessment."""
     return analyze_hard_money_loan(
-        property_value, purchase_price, rehab_budget,
-        loan_to_value, interest_rate, loan_term_months,
-        origination_points, exit_strategy, after_repair_value,
+        property_value=property_value, purchase_price=purchase_price,
+        rehab_budget=rehab_budget, loan_to_value=loan_to_value,
+        interest_rate=interest_rate, loan_term_months=loan_term_months,
+        origination_points=origination_points,
+        exit_strategy=exit_strategy,
+        after_repair_value=after_repair_value,
     )
 
 
@@ -448,9 +552,12 @@ def analyze_seller_financing_tool(
 ) -> dict:
     """Analyze seller financing deals with comprehensive terms, benefits, and risk assessment."""
     return analyze_seller_financing(
-        purchase_price, down_payment, interest_rate, loan_term_years,
-        balloon_payment_years, monthly_payment_override,
-        market_interest_rate, buyer_credit_score,
+        purchase_price=purchase_price, down_payment=down_payment,
+        interest_rate=interest_rate, loan_term_years=loan_term_years,
+        balloon_payment_years=balloon_payment_years,
+        monthly_payment_override=monthly_payment_override,
+        market_interest_rate=market_interest_rate,
+        buyer_credit_score=buyer_credit_score,
     )
 
 
@@ -470,14 +577,19 @@ def analyze_airbnb_str_tool(
     seasonal_adjustment: dict | None = None,
     furnishing_cost: float = 0,
     platform_fee_percent: float = 3,
+    ltr_rent_estimate: float | None = None,
 ) -> dict:
     """Analyze Airbnb/short-term rental income potential with seasonal variations and risk assessment."""
     return analyze_airbnb_str(
-        purchase_price, average_daily_rate, occupancy_rate,
-        down_payment_percent, interest_rate, monthly_expenses,
-        management_fee_percent, cleaning_fee_per_turnover,
-        average_stay_nights, seasonal_adjustment, furnishing_cost,
-        platform_fee_percent,
+        purchase_price=purchase_price, average_daily_rate=average_daily_rate,
+        down_payment_percent=down_payment_percent, interest_rate=interest_rate,
+        occupancy_rate=occupancy_rate, monthly_expenses=monthly_expenses,
+        management_fee_percent=management_fee_percent,
+        cleaning_fee_per_turnover=cleaning_fee_per_turnover,
+        average_stay_nights=average_stay_nights,
+        seasonal_adjustment=seasonal_adjustment,
+        furnishing_cost=furnishing_cost, platform_fee_percent=platform_fee_percent,
+        ltr_rent_estimate=ltr_rent_estimate,
     )
 
 
@@ -492,9 +604,12 @@ def analyze_1031_exchange_tool(
 ) -> dict:
     """Analyze 1031 like-kind exchange tax benefits, qualification requirements, and alternative strategies."""
     return analyze_1031_exchange(
-        relinquished_property, replacement_property,
-        holding_period_years, filing_status,
-        capital_gains_rate, state_tax_rate,
+        relinquished_property=relinquished_property,
+        replacement_property=replacement_property,
+        holding_period_years=holding_period_years,
+        filing_status=filing_status,
+        capital_gains_rate=capital_gains_rate,
+        state_tax_rate=state_tax_rate,
     )
 
 
@@ -507,12 +622,20 @@ def analyze_wholesale_deal_tool(
     holding_costs_monthly: float = 0,
     estimated_closing_costs: float = 0,
     target_buyer_type: str = "investor",
+    estimated_rehab_months: int = 6,
+    ltr_rent_estimate: float | None = None,
 ) -> dict:
     """Analyze wholesale real estate deals with assignment fees, profit margins, and exit strategies."""
     return analyze_wholesale_deal(
-        contract_price, after_repair_value, estimated_rehab_cost,
-        assignment_fee, holding_costs_monthly, estimated_closing_costs,
-        target_buyer_type,
+        contract_price=contract_price,
+        after_repair_value=after_repair_value,
+        estimated_rehab_cost=estimated_rehab_cost,
+        assignment_fee=assignment_fee,
+        holding_costs_monthly=holding_costs_monthly,
+        estimated_closing_costs=estimated_closing_costs,
+        target_buyer_type=target_buyer_type,
+        estimated_rehab_months=estimated_rehab_months,
+        ltr_rent_estimate=ltr_rent_estimate,
     )
 
 
@@ -521,19 +644,25 @@ def analyze_subject_to_deal_tool(
     purchase_price: float,
     existing_loan_balance: float,
     existing_interest_rate: float,
-    existing_monthly_payment: float,
     existing_loan_remaining_years: float,
     monthly_rent: float,
     monthly_expenses: float = 0,
     down_payment_to_seller: float = 0,
     property_value: float | None = None,
+    appreciation_rate: float = 3.0,
+    rent_growth_rate: float = 2.0,
 ) -> dict:
-    """Analyze subject-to real estate deals where buyer takes over existing mortgage payments."""
+    """Analyze subject-to real estate deals. Computes existing payment from loan terms."""
     return analyze_subject_to_deal(
-        purchase_price, existing_loan_balance, existing_interest_rate,
-        existing_monthly_payment, existing_loan_remaining_years,
-        monthly_rent, monthly_expenses, down_payment_to_seller,
-        property_value,
+        purchase_price=purchase_price,
+        existing_loan_balance=existing_loan_balance,
+        existing_interest_rate=existing_interest_rate,
+        existing_loan_remaining_years=existing_loan_remaining_years,
+        monthly_rent=monthly_rent, monthly_expenses=monthly_expenses,
+        down_payment_to_seller=down_payment_to_seller,
+        property_value=property_value,
+        appreciation_rate=appreciation_rate,
+        rent_growth_rate=rent_growth_rate,
     )
 
 
@@ -548,12 +677,17 @@ def analyze_property_management_tool(
     property_value: float = 0,
     annual_maintenance_cost: float = 0,
     current_vacancy_rate: float = 5,
+    avg_tenant_stay_months: int = 24,
 ) -> dict:
     """Compare self-management vs professional property management with cost-benefit analysis."""
     return analyze_property_management(
-        monthly_rent, self_management, professional_management or {},
-        num_units, property_value, annual_maintenance_cost,
-        current_vacancy_rate,
+        monthly_rent=monthly_rent, num_units=num_units,
+        property_value=property_value,
+        self_management=self_management,
+        professional_management=professional_management or {},
+        annual_maintenance_cost=annual_maintenance_cost,
+        current_vacancy_rate=current_vacancy_rate,
+        avg_tenant_stay_months=avg_tenant_stay_months,
     )
 
 
@@ -562,10 +696,13 @@ def track_property_expenses_tool(
     expenses: list[dict],
     property_value: float = 0,
     monthly_rent: float = 0,
-    annual_budget: float | None = None,
+    annual_budget: dict | None = None,
 ) -> dict:
     """Track and analyze property expenses across categories with benchmarking and budget variance."""
-    return track_property_expenses(expenses, property_value, monthly_rent, annual_budget)
+    return track_property_expenses(
+        expenses=expenses, property_value=property_value,
+        monthly_rent=monthly_rent, annual_budget=annual_budget,
+    )
 
 
 @mcp.tool()
@@ -573,7 +710,7 @@ def track_deal_pipeline_tool(
     deals: list[dict],
 ) -> dict:
     """Track and analyze multiple real estate deals through various stages with performance metrics."""
-    return track_deal_pipeline(deals)
+    return track_deal_pipeline(deals=deals)
 
 
 # ── Advanced calculators ─────────────────────────────────────────────────────
@@ -599,12 +736,20 @@ def analyze_rent_vs_buy_tool(
 ) -> dict:
     """Compare the costs and benefits of renting vs buying a home."""
     return analyze_rent_vs_buy(
-        monthly_rent, home_price, annual_rent_increase,
-        down_payment_percent, interest_rate, loan_term_years,
-        property_tax_rate, insurance_rate, maintenance_percent,
-        hoa_monthly, annual_appreciation, marginal_tax_rate,
-        investment_return_rate, analysis_period_years,
-        closing_costs_percent, selling_costs_percent,
+        monthly_rent=monthly_rent, annual_rent_increase=annual_rent_increase,
+        home_price=home_price,
+        down_payment_percent=down_payment_percent,
+        interest_rate=interest_rate, loan_term_years=loan_term_years,
+        property_tax_rate=property_tax_rate,
+        insurance_rate=insurance_rate,
+        maintenance_percent=maintenance_percent,
+        hoa_monthly=hoa_monthly,
+        annual_appreciation=annual_appreciation,
+        marginal_tax_rate=marginal_tax_rate,
+        investment_return_rate=investment_return_rate,
+        analysis_period_years=analysis_period_years,
+        closing_costs_percent=closing_costs_percent,
+        selling_costs_percent=selling_costs_percent,
     )
 
 
@@ -626,10 +771,16 @@ def calculate_capital_gains_tax_tool(
 ) -> dict:
     """Calculate capital gains tax liability for real estate sales with optimization strategies."""
     return calculate_capital_gains_tax(
-        sale_price, purchase_price, holding_period_years,
-        selling_costs_percent, improvements_cost, depreciation_taken,
-        is_primary_residence, years_lived_in, filing_status,
-        other_income, state, installment_sale, installment_years,
+        sale_price=sale_price, purchase_price=purchase_price,
+        selling_costs_percent=selling_costs_percent,
+        improvements_cost=improvements_cost,
+        depreciation_taken=depreciation_taken,
+        holding_period_years=holding_period_years,
+        is_primary_residence=is_primary_residence,
+        years_lived_in=years_lived_in, filing_status=filing_status,
+        other_income=other_income, state=state,
+        installment_sale=installment_sale,
+        installment_years=installment_years,
     )
 
 
@@ -645,9 +796,12 @@ def analyze_joint_venture_tool(
 ) -> dict:
     """Analyze joint venture partnerships for real estate investments with profit splitting and risk assessment."""
     return analyze_joint_venture(
-        total_project_cost, projected_profit, project_duration_months,
-        partners, profit_split_method, preferred_return_rate,
-        waterfall_tiers,
+        total_project_cost=total_project_cost,
+        projected_profit=projected_profit,
+        project_duration_months=project_duration_months,
+        partners=partners, profit_split_method=profit_split_method,
+        preferred_return_rate=preferred_return_rate,
+        waterfall_tiers=waterfall_tiers,
     )
 
 
@@ -658,7 +812,11 @@ def analyze_market_comps_tool(
     adjustments: dict | None = None,
 ) -> dict:
     """Analyze market conditions with comparable property analysis, CMA, and investment metrics."""
-    return analyze_market_comps(subject_property, comparable_properties, adjustments or {})
+    return analyze_market_comps(
+        subject_property=subject_property,
+        comparable_properties=comparable_properties,
+        adjustments=adjustments or {},
+    )
 
 
 # ── Resources ────────────────────────────────────────────────────────────────

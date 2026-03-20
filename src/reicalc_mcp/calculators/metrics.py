@@ -1,6 +1,7 @@
 """Financial metrics calculators: IRR, fix-and-flip, NPV, COCR, DSCR, break-even."""
 
-from ._common import calculate_mortgage_payment, calculate_irr, calculate_npv, round2
+from ._common import calculate_mortgage_payment, calculate_irr, calculate_npv, round2, safe_irr_pct
+from ._validation import validate_positive, validate_non_negative, validate_non_empty_list
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +70,9 @@ def calculate_irr_tool(
     holding_period_years: int | None = None,
 ) -> dict:
     """Calculate IRR with sensitivity analysis for a real estate investment."""
+    validate_positive(initial_investment, "initial_investment")
+    validate_non_empty_list(annual_cash_flows, "annual_cash_flows")
+    validate_positive(projected_sale_price, "projected_sale_price")
     holding_period = holding_period_years if holding_period_years is not None else len(annual_cash_flows)
 
     # Net sale proceeds
@@ -92,7 +96,7 @@ def calculate_irr_tool(
         flows.append(net_sale_proceeds)
 
     # Calculate IRR
-    irr = calculate_irr(flows) * 100  # as percentage
+    irr, irr_converged = safe_irr_pct(flows)
 
     # NPV at target rate
     target_rate = target_irr / 100
@@ -121,7 +125,7 @@ def calculate_irr_tool(
             # Last year: reduce cash flow portion but keep sale proceeds
             cf_portion = annual_cash_flows[-1] * 0.9 if annual_cash_flows else 0
             lower_cf_flows.append(cf_portion + net_sale_proceeds)
-    irr_lower_cf = calculate_irr(lower_cf_flows) * 100
+    irr_lower_cf, _ = safe_irr_pct(lower_cf_flows)
 
     # Scenario 2: 10% lower sale price
     lower_sale = projected_sale_price * 0.9
@@ -129,12 +133,12 @@ def calculate_irr_tool(
     lower_net_sale = lower_sale - lower_sale_costs - loan_balance_at_sale
     lower_sale_flows = list(flows)
     lower_sale_flows[-1] = (annual_cash_flows[-1] if annual_cash_flows and holding_period <= len(annual_cash_flows) else 0) + lower_net_sale
-    irr_lower_sale = calculate_irr(lower_sale_flows) * 100
+    irr_lower_sale, _ = safe_irr_pct(lower_sale_flows)
 
     # Scenario 3: 20% higher investment
     higher_inv_flows = list(flows)
     higher_inv_flows[0] = flows[0] * 1.2
-    irr_higher_inv = calculate_irr(higher_inv_flows) * 100
+    irr_higher_inv, _ = safe_irr_pct(higher_inv_flows)
 
     sensitivity = {
         "scenarios": [
@@ -178,6 +182,7 @@ def calculate_irr_tool(
     return {
         "irr_analysis": {
             "irr": round2(irr),
+            "irr_converged": irr_converged,
             "target_irr": target_irr,
             "exceeds_target": irr >= target_irr,
             "holding_period_years": holding_period,
@@ -227,6 +232,9 @@ def analyze_fix_flip(
     contingency_percent: float = 10,
 ) -> dict:
     """Analyze a fix-and-flip real estate deal."""
+    validate_positive(purchase_price, "purchase_price")
+    validate_non_negative(rehab_budget, "rehab_budget")
+    validate_positive(after_repair_value, "after_repair_value")
 
     # ------ Financing ------
     contingency = rehab_budget * (contingency_percent / 100)
@@ -458,6 +466,8 @@ def calculate_npv_tool(
     comparison_investment: dict | None = None,
 ) -> dict:
     """Calculate Net Present Value with comprehensive analysis."""
+    validate_positive(initial_investment, "initial_investment")
+    validate_non_empty_list(cash_flows, "cash_flows")
     initial = abs(initial_investment)
     rate = discount_rate / 100
 
@@ -499,7 +509,7 @@ def calculate_npv_tool(
     profitability_index = _safe_div(pv_inflows, initial)
 
     # IRR (modified)
-    irr_val = calculate_irr(flow_array) * 100
+    irr_val, _ = safe_irr_pct(flow_array)
 
     # Payback period (simple)
     cumulative = -initial
@@ -686,8 +696,14 @@ def calculate_cocr(
     vacancy_rate: float = 5,
     loan_details: dict | None = None,
     reserve_fund_percent: float = 5,
+    rent_growth: float = 0.03,
+    expense_growth: float = 0.025,
+    appreciation_rate: float = 0.04,
 ) -> dict:
     """Calculate Cash-on-Cash Return and related rental property metrics."""
+    validate_positive(purchase_price, "purchase_price")
+    validate_positive(down_payment, "down_payment")
+    validate_positive(annual_rental_income, "annual_rental_income")
     if annual_expenses is None:
         annual_expenses = {}
     if loan_details is None:
@@ -846,10 +862,6 @@ def calculate_cocr(
     scenario_analysis = scenarios
 
     # 5-year projection
-    rent_growth = 0.03
-    expense_growth = 0.025
-    appreciation_rate = 0.04
-
     projection = []
     proj_income = annual_rental_income
     proj_expenses = total_annual_expenses

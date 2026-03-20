@@ -3,7 +3,7 @@
 import math
 import random
 
-from ._common import calculate_mortgage_payment, calculate_irr, calculate_npv, round2
+from ._common import calculate_mortgage_payment, calculate_irr, safe_irr_pct, calculate_npv, round2
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ def _scenario_metrics(scenario: dict, discount_rate: float = 10) -> dict:
             yr_cf += sale_proceeds
         cash_flows.append(yr_cf)
 
-    irr = calculate_irr(cash_flows) * 100
+    irr, _ = safe_irr_pct(cash_flows)
     npv = calculate_npv(cash_flows, discount_rate / 100)
 
     total_return = sum(cash_flows[1:]) / down_payment * 100 if down_payment > 0 else 0
@@ -391,7 +391,7 @@ def _mc_scenario_result(params: dict, samples: dict) -> dict:
             yr_cf += sale_price - remaining
         cash_flows.append(yr_cf)
 
-    irr = calculate_irr(cash_flows) * 100
+    irr, _ = safe_irr_pct(cash_flows)
     total_return = sum(cash_flows[1:]) / total_initial * 100 if total_initial > 0 else 0
     equity_multiple = (total_initial + sum(cash_flows[1:])) / total_initial if total_initial > 0 else 0
 
@@ -506,7 +506,7 @@ def run_monte_carlo(
     mean_irr = summary_statistics["irr"]["mean"]
     std_irr = summary_statistics["irr"]["std_dev"]
     downside_values = [v for v in metric_arrays["irr"] if v < mean_irr]
-    downside_dev = math.sqrt(sum((v - mean_irr) ** 2 for v in downside_values) / n) if downside_values else 0
+    downside_dev = math.sqrt(sum((v - mean_irr) ** 2 for v in downside_values) / len(downside_values)) if downside_values else 0
     risk_free_rate = 4.0
     sharpe_ratio = (mean_irr - risk_free_rate) / std_irr if std_irr > 0 else 0
     sortino_ratio = (mean_irr - risk_free_rate) / downside_dev if downside_dev > 0 else 0
@@ -633,12 +633,12 @@ def run_monte_carlo(
 # ---------------------------------------------------------------------------
 
 _FEDERAL_BRACKETS_SINGLE = [
-    (11600, 0.10),
-    (47150, 0.12),
-    (100525, 0.22),
-    (191950, 0.24),
-    (243725, 0.32),
-    (609350, 0.35),
+    (11925, 0.10),
+    (48475, 0.12),
+    (103350, 0.22),
+    (197300, 0.24),
+    (250525, 0.32),
+    (626350, 0.35),
     (float("inf"), 0.37),
 ]
 
@@ -649,7 +649,7 @@ _DEPRECIATION_LIVES = {
 
 
 def _federal_tax(taxable_income: float) -> float:
-    """Calculate federal income tax for single filer using 2024 brackets."""
+    """Calculate federal income tax for single filer using 2026 brackets."""
     if taxable_income <= 0:
         return 0.0
     tax = 0.0
@@ -1049,7 +1049,7 @@ def _analyze_single_property(
             yr_cf += future_val - remaining
         cash_flows.append(yr_cf)
 
-    irr = calculate_irr(cash_flows) * 100
+    irr, _ = safe_irr_pct(cash_flows)
 
     # Valuation metrics
     price_per_sqft = purchase_price / sqft if sqft > 0 else 0

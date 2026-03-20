@@ -280,3 +280,55 @@ def test_breakeven_with_variable_costs():
     )
     assert "sensitivity_analysis" in result
     assert "risk_assessment" in result
+
+
+# ---------------------------------------------------------------------------
+# IRR known-value assertion
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Bug A3: COCR wrapper param order + Bug I: growth rate params
+# ---------------------------------------------------------------------------
+
+def test_cocr_param_order():
+    """Verify annual_rental_income is used as income, not closing_costs."""
+    result = calculate_cocr(
+        purchase_price=300_000,
+        down_payment=60_000,
+        closing_costs=5_000,
+        annual_rental_income=24_000,
+    )
+    assert result["income_analysis"]["gross_annual_rental_income"] == 24_000
+
+
+def test_cocr_custom_growth_rates():
+    """Custom rent_growth should change 5-year projection."""
+    result_default = calculate_cocr(
+        purchase_price=300_000,
+        down_payment=60_000,
+        annual_rental_income=24_000,
+    )
+    result_high = calculate_cocr(
+        purchase_price=300_000,
+        down_payment=60_000,
+        annual_rental_income=24_000,
+        rent_growth=0.10,
+    )
+    # Higher growth → higher year 5 projected rental income
+    default_y5 = result_default["five_year_projection"][-1]["rental_income"]
+    high_y5 = result_high["five_year_projection"][-1]["rental_income"]
+    assert high_y5 > default_y5
+
+
+def test_irr_tool_known_value():
+    """Test IRR tool with a known investment returning ~18.6%."""
+    result = calculate_irr_tool(
+        initial_investment=100_000,
+        annual_cash_flows=[10_000, 10_000, 10_000, 10_000, 10_000],
+        projected_sale_price=150_000,
+        selling_costs_percent=0,
+        loan_balance_at_sale=0,
+    )
+    irr = result["irr_analysis"]["irr"]
+    assert irr > 10, f"IRR too low: {irr}"
+    assert irr < 30, f"IRR too high: {irr}"

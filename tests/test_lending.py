@@ -145,6 +145,21 @@ def test_compare_loans_with_costs():
     assert result["comparison_summary"]["num_loans_compared"] == 2
 
 
+def test_dti_computed_housing_payment():
+    """Verify DTI can compute PITI from purchase_price/down_payment/interest_rate."""
+    result = analyze_debt_to_income(
+        monthly_income=8_000,
+        purchase_price=350_000,
+        down_payment=70_000,
+        interest_rate=7.0,
+    )
+    # proposed_payment should be auto-computed PITI, not 0
+    proposed = result["proposed_payment"]["housing_payment"]
+    assert proposed > 1_500  # reasonable PITI for $280k loan at 7%
+    assert proposed < 3_000
+    assert "qualification" in result
+
+
 def test_compare_loans_with_points():
     loans = [
         {

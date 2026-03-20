@@ -160,7 +160,6 @@ def test_subject_to_basic():
         purchase_price=200_000,
         existing_loan_balance=160_000,
         existing_interest_rate=4.5,
-        existing_monthly_payment=810,
         existing_loan_remaining_years=22,
         monthly_rent=1_500,
     )
@@ -175,7 +174,6 @@ def test_subject_to_with_expenses():
         purchase_price=250_000,
         existing_loan_balance=200_000,
         existing_interest_rate=3.75,
-        existing_monthly_payment=926,
         existing_loan_remaining_years=25,
         monthly_rent=1_800,
         monthly_expenses=400,
@@ -191,7 +189,6 @@ def test_subject_to_projection():
         purchase_price=180_000,
         existing_loan_balance=150_000,
         existing_interest_rate=5.0,
-        existing_monthly_payment=805,
         existing_loan_remaining_years=24,
         monthly_rent=1_400,
         property_value=195_000,
@@ -200,3 +197,98 @@ def test_subject_to_projection():
     assert len(result["5_year_projection"]) == 5
     assert "risk_assessment" in result
     assert "recommendations" in result
+
+
+# ---------------------------------------------------------------------------
+# Subject-to: verify computed payment matches manual calculation
+# ---------------------------------------------------------------------------
+
+def test_subject_to_computed_payment():
+    """Verify that removing existing_monthly_payment and computing it gives correct results."""
+    from src.reicalc_mcp.calculators._common import calculate_mortgage_payment
+
+    balance = 160_000
+    rate = 4.5
+    years = 22
+
+    result = analyze_subject_to_deal(
+        purchase_price=200_000,
+        existing_loan_balance=balance,
+        existing_interest_rate=rate,
+        existing_loan_remaining_years=years,
+        monthly_rent=1_500,
+    )
+
+    # The computed monthly payment should match manual calculation
+    expected = calculate_mortgage_payment(balance, rate / 100 / 12, int(years * 12))
+    actual = result["deal_structure"]["existing_monthly_payment"]
+    assert abs(actual - round(expected, 2)) < 0.01
+
+    # Should have positive cash flow (1500 rent > ~900 payment)
+    assert result["cash_flow_analysis"]["monthly_cash_flow"] > 0
+
+
+def test_wholesale_custom_rehab_months():
+    """Verify parameterized rehab months are used."""
+    result = analyze_wholesale_deal(
+        contract_price=120_000,
+        after_repair_value=220_000,
+        estimated_rehab_cost=40_000,
+        assignment_fee=10_000,
+        holding_costs_monthly=1_000,
+        estimated_rehab_months=3,
+    )
+    # 3 months * $1000 = $3000 holding costs
+    # vs default 6 months * $1000 = $6000
+    all_in = result["end_buyer_analysis"]["all_in_cost"]
+    # Verify holding costs are based on 3 months not 6
+    expected_all_in = (120_000 + 10_000) + 40_000 + 0 + 3_000  # contract+fee + rehab + closing + holding
+    assert abs(all_in - expected_all_in) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: Subject-to custom appreciation and rent growth
+# ---------------------------------------------------------------------------
+
+def test_subject_to_custom_appreciation():
+    """5% appreciation should produce higher 5-year values than default 3%."""
+    result_default = analyze_subject_to_deal(
+        purchase_price=200_000,
+        existing_loan_balance=160_000,
+        existing_interest_rate=4.5,
+        existing_loan_remaining_years=22,
+        monthly_rent=1_500,
+    )
+    result_5pct = analyze_subject_to_deal(
+        purchase_price=200_000,
+        existing_loan_balance=160_000,
+        existing_interest_rate=4.5,
+        existing_loan_remaining_years=22,
+        monthly_rent=1_500,
+        appreciation_rate=5.0,
+    )
+    val_default = result_default["5_year_projection"][-1]["property_value"]
+    val_5pct = result_5pct["5_year_projection"][-1]["property_value"]
+    assert val_5pct > val_default, "5% appreciation should exceed 3% default"
+
+
+def test_subject_to_custom_rent_growth():
+    """4% rent growth should produce higher year-5 rent than default 2%."""
+    result_default = analyze_subject_to_deal(
+        purchase_price=200_000,
+        existing_loan_balance=160_000,
+        existing_interest_rate=4.5,
+        existing_loan_remaining_years=22,
+        monthly_rent=1_500,
+    )
+    result_4pct = analyze_subject_to_deal(
+        purchase_price=200_000,
+        existing_loan_balance=160_000,
+        existing_interest_rate=4.5,
+        existing_loan_remaining_years=22,
+        monthly_rent=1_500,
+        rent_growth_rate=4.0,
+    )
+    rent_default = result_default["5_year_projection"][-1]["monthly_rent"]
+    rent_4pct = result_4pct["5_year_projection"][-1]["monthly_rent"]
+    assert rent_4pct > rent_default, "4% rent growth should exceed 2% default"

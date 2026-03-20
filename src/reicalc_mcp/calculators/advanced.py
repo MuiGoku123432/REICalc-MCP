@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import math
 import statistics
 from typing import Any
 
-from ._common import calculate_mortgage_payment, calculate_irr, round2
+from ._common import calculate_mortgage_payment, calculate_irr, round2, safe_irr_pct
+from ._validation import validate_positive, validate_non_empty_list
 
 
 # ---------------------------------------------------------------------------
@@ -64,18 +66,21 @@ _STATE_CG_RATES: dict[str, float] = {
 
 
 def _federal_ltcg_rate(taxable_income: float, filing_status: str) -> float:
-    """Return the federal long-term capital gains rate (0, 15, or 20 %)."""
+    """Return the federal long-term capital gains rate (0, 15, or 20 %).
+
+    Brackets updated to 2026 per IRS Rev. Proc. 2025-11.
+    """
     if filing_status == "married":
-        if taxable_income <= 89_250:
+        if taxable_income <= 98_900:
             return 0.0
-        elif taxable_income <= 553_850:
+        elif taxable_income <= 613_700:
             return 15.0
         else:
             return 20.0
     else:  # single
-        if taxable_income <= 44_625:
+        if taxable_income <= 49_450:
             return 0.0
-        elif taxable_income <= 492_300:
+        elif taxable_income <= 545_500:
             return 15.0
         else:
             return 20.0
@@ -109,6 +114,9 @@ def analyze_rent_vs_buy(
     selling_costs_percent: float = 6.0,
 ) -> dict[str, Any]:
     """Compare the financial outcome of renting versus buying over *analysis_period_years*."""
+
+    validate_positive(home_price, "home_price")
+    validate_positive(monthly_rent, "monthly_rent")
 
     # ---- Derived constants ------------------------------------------------
     down_payment = home_price * (down_payment_percent / 100)
@@ -333,6 +341,9 @@ def calculate_capital_gains_tax(
 ) -> dict[str, Any]:
     """Calculate capital gains tax liability for a property sale."""
 
+    validate_positive(sale_price, "sale_price")
+    validate_positive(purchase_price, "purchase_price")
+
     selling_costs = sale_price * (selling_costs_percent / 100)
     adjusted_basis = purchase_price + improvements_cost - depreciation_taken
     net_sale_price = sale_price - selling_costs
@@ -359,13 +370,13 @@ def calculate_capital_gains_tax(
     if is_long_term:
         federal_rate = _federal_ltcg_rate(taxable_income, filing_status)
     else:
-        # Short-term gains taxed as ordinary income – approximate top bracket
-        federal_rate = 37.0 if taxable_income > 578_125 else (
-            35.0 if taxable_income > 231_250 else (
-            32.0 if taxable_income > 182_100 else (
-            24.0 if taxable_income > 95_375 else (
-            22.0 if taxable_income > 44_725 else (
-            12.0 if taxable_income > 11_000 else 10.0)))))
+        # Short-term gains taxed as ordinary income – 2026 brackets
+        federal_rate = 37.0 if taxable_income > 626_350 else (
+            35.0 if taxable_income > 250_525 else (
+            32.0 if taxable_income > 197_300 else (
+            24.0 if taxable_income > 103_350 else (
+            22.0 if taxable_income > 48_475 else (
+            12.0 if taxable_income > 11_925 else 10.0)))))
 
     federal_tax = remaining_gain * (federal_rate / 100)
 
@@ -694,7 +705,7 @@ def analyze_joint_venture(
         )
         # IRR: initial outflow, then profit at end of period
         cash_flows = [-contribution] + [0.0] * max(int(duration_years) - 1, 0) + [contribution + distribution]
-        irr = calculate_irr(cash_flows) * 100
+        irr, _ = safe_irr_pct(cash_flows)
 
         return_analysis.append({
             "name": pd["name"],
@@ -807,6 +818,8 @@ def analyze_market_comps(
 ) -> dict[str, Any]:
     """Perform a Comparative Market Analysis (CMA) for the subject property."""
 
+    validate_non_empty_list(comparable_properties, "comparable_properties")
+
     adj = adjustments or {}
     price_per_sqft_adj = adj.get("price_per_sqft_adjustment", 25.0)
     bedroom_adj = adj.get("bedroom_adjustment", 10_000.0)
@@ -853,7 +866,8 @@ def analyze_market_comps(
         condition_diff = subj_condition - comp_condition
         cond_adjustment = condition_diff * condition_adj
 
-        age_diff = comp_year - subj_year  # positive = comp is newer → subject worth less
+        age_diff = comp_year - subj_year  # positive = comp is newer
+        # Negate: if comp is newer, subject is older → adjust comp price UP to match subject
         age_adjustment = -age_diff * age_adj_per_year
 
         lot_diff = subj_lot - comp_lot
@@ -876,7 +890,8 @@ def analyze_market_comps(
                 parts = comp_sale_date.split("-")
                 sale_year = int(parts[0])
                 sale_month = int(parts[1]) if len(parts) > 1 else 6
-                months_ago = (2026 - sale_year) * 12 + (3 - sale_month)  # approx from now
+                _today = datetime.date.today()
+                months_ago = (_today.year - sale_year) * 12 + (_today.month - sale_month)
                 recency_weight = max(1.0 - months_ago / 24, 0.2)  # decay over 24 months
             except (ValueError, IndexError):
                 recency_weight = 0.5
@@ -992,7 +1007,7 @@ def analyze_market_comps(
     # ---- CMA report ------------------------------------------------------
     cma_report = {
         "subject": subject_property,
-        "analysis_date": "2026-03-18",
+        "analysis_date": datetime.date.today().isoformat(),
         "estimated_market_value": round2(estimated_value),
         "value_range": f"${round2(price_low):,.0f} – ${round2(price_high):,.0f}",
         "confidence": confidence_label,

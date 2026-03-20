@@ -71,6 +71,7 @@ def analyze_property_management(
     professional_management: dict | None = None,
     annual_maintenance_cost: float = 0,
     current_vacancy_rate: float = 5,
+    avg_tenant_stay_months: int = 24,
 ) -> dict:
     """Compare self-management vs professional property management.
 
@@ -112,8 +113,7 @@ def analyze_property_management(
     monthly_mgmt_fee = round2(total_monthly_rent * (mgmt_fee_pct / 100))
     annual_mgmt_fee = round2(monthly_mgmt_fee * 12)
 
-    # Leasing fee: assume average tenant stays ~2 years, so amortize leasing fee
-    avg_tenant_stay_months = 24
+    # Leasing fee: amortize over average tenant stay
     leasing_fee_per_unit = monthly_rent * (leasing_fee_pct / 100)
     monthly_leasing_amortized = round2(leasing_fee_per_unit * num_units / avg_tenant_stay_months)
     annual_leasing_amortized = round2(monthly_leasing_amortized * 12)
@@ -161,7 +161,7 @@ def analyze_property_management(
     break_even_units_rounded = max(1, int(round(break_even_units))) if break_even_units > 0 else 0
 
     # ---- Time value analysis ----
-    monthly_time_saved = round2(hours_per_month) if cheaper_option == "professional_management" or True else 0
+    monthly_time_saved = round2(hours_per_month) if cheaper_option == "professional_management" else 0
     annual_time_saved = round2(hours_per_year)
     time_value_of_savings = round2(annual_time_saved * hourly_value)
     cost_per_hour_saved = round2(prof_total_fees / hours_per_year) if hours_per_year > 0 else 0
@@ -538,6 +538,7 @@ def track_property_expenses(
 
 def track_deal_pipeline(
     deals: list[dict],
+    stage_probabilities: dict[str, float] | None = None,
 ) -> dict:
     """Analyse a real-estate deal pipeline.
 
@@ -547,6 +548,7 @@ def track_deal_pipeline(
     Returns pipeline summary, performance metrics, expected value analysis,
     pipeline health, stage analysis, and recommendations.
     """
+    probs = stage_probabilities if stage_probabilities is not None else STAGE_PROBABILITIES
     total_deals = len(deals)
     if total_deals == 0:
         return {
@@ -594,7 +596,7 @@ def track_deal_pipeline(
             "total_value": round2(total_value),
             "total_estimated_profit": round2(total_profit),
             "avg_deal_size": round2(total_value / len(stage_deals)),
-            "probability": STAGE_PROBABILITIES.get(stage, 0),
+            "probability": probs.get(stage, 0),
         }
 
     total_pipeline_value = round2(sum(
@@ -640,13 +642,13 @@ def track_deal_pipeline(
         stage_deals = by_stage.get(stage, [])
         if not stage_deals:
             continue
-        prob = STAGE_PROBABILITIES.get(stage, 0) / 100
+        prob = probs.get(stage, 0) / 100
         stage_profit = sum(d.get("estimated_profit", 0) for d in stage_deals)
         stage_ev = round2(stage_profit * prob)
         total_expected_value += stage_ev
         ev_by_stage[stage] = {
             "total_estimated_profit": round2(stage_profit),
-            "probability": STAGE_PROBABILITIES.get(stage, 0),
+            "probability": probs.get(stage, 0),
             "expected_value": stage_ev,
             "deal_count": len(stage_deals),
         }
@@ -752,7 +754,7 @@ def track_deal_pipeline(
             "total_estimated_profit": round2(total_profit),
             "avg_purchase_price": round2(total_value / len(stage_deals)),
             "avg_estimated_profit": round2(total_profit / len(stage_deals)),
-            "probability": STAGE_PROBABILITIES.get(stage, 0),
+            "probability": probs.get(stage, 0),
             "velocity": velocity.get(stage, {}),
         }
         if offer_amounts:

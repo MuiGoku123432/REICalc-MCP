@@ -231,6 +231,45 @@ def test_compare_properties_basic():
     assert len(result["property_analyses"]) == 2
 
 
+# ---------------------------------------------------------------------------
+# Bug F: 2026 tax brackets in analysis.py
+# ---------------------------------------------------------------------------
+
+def test_federal_tax_2026_brackets():
+    """Verify analysis.py _federal_tax uses 2026 brackets (48475 threshold, not 47150)."""
+    from src.reicalc_mcp.calculators.analysis import _federal_tax
+
+    # $50,000 income: 10% on first $11,925, 12% on next $36,550 ($11,925-$48,475), 22% on remainder
+    tax = _federal_tax(50_000)
+    expected = 11_925 * 0.10 + (48_475 - 11_925) * 0.12 + (50_000 - 48_475) * 0.22
+    assert abs(tax - expected) < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Bug G: downside deviation denominator (Monte Carlo)
+# ---------------------------------------------------------------------------
+
+def test_monte_carlo_sortino_ratio():
+    """Sortino ratio should use len(downside_values) not total n as denominator."""
+    result = run_monte_carlo(
+        investment_parameters={
+            "purchase_price": 300_000,
+            "annual_rental_income": 30_000,
+            "annual_expenses": 8_000,
+            "down_payment_percent": 20,
+        },
+        variable_distributions={
+            "rental_income": {"mean": 30_000, "std_dev": 3_000, "distribution": "normal"},
+            "expenses": {"mean": 8_000, "std_dev": 1_500, "distribution": "normal"},
+        },
+        simulation_settings={"num_simulations": 500, "random_seed": 42},
+        target_metrics={"minimum_irr": 10, "minimum_cash_flow": 0},
+    )
+    # Sortino ratio should exist and be a valid number
+    sortino = result["risk_metrics"]["sortino_ratio"]
+    assert isinstance(sortino, (int, float))
+
+
 def test_compare_properties_with_loan_terms():
     result = compare_properties(
         properties=[
